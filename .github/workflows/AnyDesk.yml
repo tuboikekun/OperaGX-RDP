@@ -1,4 +1,4 @@
-name: Cloud PC + AnyDesk + Opera GX (1080p Display)
+name: Cloud PC + AnyDesk + Opera GX (1080p File Extraction)
 
 on:
   workflow_dispatch:
@@ -49,7 +49,6 @@ jobs:
           Write-Host "Injecting security credentials..."
           $targetPath = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
           
-          # Assign the system password directly to the standalone binary
           echo "${{ env.ANYDESK_PASS }}" | & $targetPath --set-password
           
           New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableUIADesktopToggle" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
@@ -60,7 +59,6 @@ jobs:
       - name: Optimize Canvas Resolution for No-Scroll Mobile View
         run: |
           Write-Host "Forcing screen resolution calibration to 1920x1080 frame buffer..."
-          # Calibrates display layout to HD bounds to prevent scrollbars on mobile viewports
           Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction SilentlyContinue
 
       - name: Launch AnyDesk Core Service Thread
@@ -68,7 +66,7 @@ jobs:
           Write-Host "Starting AnyDesk application in backend context..."
           $targetPath = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
           Start-Process -FilePath $targetPath -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 8
 
       - name: Minimize Running Infrastructure Windows
         run: |
@@ -103,17 +101,22 @@ jobs:
 
       - name: Fetch and Display AnyDesk Connection Credentials
         run: |
-          Write-Host "Querying engine metadata for terminal identification parameters..."
-          $targetPath = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
+          Write-Host "Scanning system infrastructure configuration files for unique access keys..."
           $deviceId = "Not Found"
           
+          # Target configuration path mapping for system context executions
+          $configPath = "C:\ProgramData\AnyDesk\system.conf"
+          
           for ($i = 1; $i -le 15; $i++) {
-              $idOutput = & $targetPath --get-id 2>$null
-              if ($idOutput -match '(\d+)') {
-                  $deviceId = $idOutput.Trim()
-                  break
+              if (Test-Path $configPath) {
+                  $content = Get-Content $configPath -Raw
+                  # Regex matches 'ad.id=' configuration lines perfectly
+                  if ($content -match 'ad\.id=(\d+)') {
+                      $deviceId = $Matches[1]
+                      break
+                  }
               }
-              Start-Sleep -Seconds 3
+              Start-Sleep -Seconds 2
           }
           
           $ESC = [char]27
