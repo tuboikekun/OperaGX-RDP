@@ -1,4 +1,4 @@
-name: Cloud PC + AnyDesk + Opera GX (Direct ID Bypass)
+name: Cloud PC + AnyDesk + Opera GX (Auto UI Injection)
 
 on:
   workflow_dispatch:
@@ -92,13 +92,44 @@ jobs:
           
           Write-Host "Opera GX successfully configured!"
 
+      - name: Inject Pre-Configured UI States (Gift Icon Autofill)
+        run: |
+          Write-Host "Constructing user profile paths for Administrator..."
+          $targetPath = "C:\Users\Administrator\AppData\Roaming\Opera Software\Opera GX Stable"
+          if (-not (Test-Path $targetPath)) { New-Item -ItemType Directory -Path $targetPath -Force | Out-Null }
+          
+          Write-Host "Injecting sidebar configuration layouts..."
+          # Builds a pre-configured local Preferences file layout that tells the sidebar interface parameters to show the rewards container structures instantly
+          $prefJson = @'
+          {
+             "ui": {
+                "sidebar": {
+                   "custom_state": {
+                      "gx-rewards": {"visible": true, "pinned": true}
+                   },
+                   "visible": true
+                }
+             }
+          }
+          '@
+          
+          $prefFile = Join-Path $targetPath "Preferences"
+          if (-not (Test-Path $prefFile)) {
+              Set-Content -Path $prefFile -Value $prefJson -Force
+              Write-Host "Preferences layout successfully injected!"
+          } else {
+              Write-Host "Preferences layout already present. Merging rules skipped."
+          }
+
       - name: Fetch and Display AnyDesk Connection Address
         run: |
+          $ad = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
+          if (-not (Test-Path $ad)) { $ad = "C:\Program Files\AnyDesk\AnyDesk.exe" }
+          
           Write-Host "Extracting AnyDesk ID directly from local configuration database..."
           $confPath = "C:\ProgramData\AnyDesk\system.conf"
           $cleanId = ""
           
-          # Retry loop specifically reading the file directly rather than utilizing the buggy terminal CLI tool
           for ($i = 1; $i -le 10; $i++) {
               if (Test-Path $confPath) {
                   $content = Get-Content $confPath -Raw
@@ -111,7 +142,6 @@ jobs:
               Start-Sleep -Seconds 4
           }
           
-          # Fallback: If system.conf is restricted, check alternative service.conf path
           if (-not $cleanId) {
               $altPath = "C:\Program Files (x86)\AnyDesk\service.conf"
               if (Test-Path $altPath) {
