@@ -15,21 +15,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 190
     env:
-      VNC_PASS: Pass1234
       RUNTIME_MINUTES: 180
 
     steps:
-      - name: Force Password on Current User Account
-        run: |
-          # Dynamically detect the current logged-in user
-          $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name.Split('\')[1]
-          Write-Host "Detected current user: $currentUser"
-          
-          # Apply password to the detected user
-          $user = [ADSI]"WinNT://localhost/$currentUser,user"
-          $user.SetPassword("Pass1234")
-          Write-Host "✅ Password successfully set to Pass1234 for $currentUser"
-
       - name: Wipe Unnecessary Pre-Installed GitHub Apps & Shortcuts
         run: |
           $publicDesktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
@@ -39,25 +27,22 @@ jobs:
       - name: Force Full HD Resolution
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      - name: Install and Configure TightVNC Server (Silent Registry Injection)
+      - name: Install and Configure TightVNC Server (Auth-Disabled Bypass)
         run: |
           Invoke-WebRequest -Uri "https://www.tightvnc.com/download/2.8.84/tightvnc-2.8.84-gpl-setup-64bit.msi" -OutFile "$env:TEMP\tightvnc.msi"
           Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\tightvnc.msi`" /quiet /qn SERVER_REGISTER_AS_SERVICE=1" -Wait
           
           Start-Sleep -Seconds 5
           
+          # Force the Registry to COMPLETELY DISABLE authentication check requirements
           $vncPath = "HKLM:\SOFTWARE\TightVNC\Server"
           if (Test-Path $vncPath) {
-              Set-ItemProperty -Path $vncPath -Name "AuthRequired" -Value 1 -Type DWord
-              Set-ItemProperty -Path $vncPath -Name "AuthType" -Value 1 -Type DWord
+              Set-ItemProperty -Path $vncPath -Name "AuthRequired" -Value 0 -Type DWord
               Set-ItemProperty -Path $vncPath -Name "AllowLoopback" -Value 1 -Type DWord
               Set-ItemProperty -Path $vncPath -Name "AcceptLocalConnections" -Value 1 -Type DWord
-              
-              [byte[]]$passHex = 0x21, 0x47, 0x66, 0x7A, 0x55, 0xAA, 0x6B, 0x39
-              Set-ItemProperty -Path $vncPath -Name "Password" -Value $passHex -Type Binary
-              Set-ItemProperty -Path $vncPath -Name "ControlPassword" -Value $passHex -Type Binary
           }
           
+          # Force refresh using the true internal msi service name identifier
           Restart-Service -Name "tvnserver" -Force
 
       - name: Download & Force Consumer Build of Opera GX
@@ -67,6 +52,7 @@ jobs:
 
       - name: Deploy Web Interface & Dynamic Gateway Engines
         run: |
+          # Strip out all interactive terminal elements, progress bars, and warnings to prevent stalling
           python -m pip install websockify --quiet --no-input --disable-pip-version-check --no-color --progress-bar off
           npm install -g localtunnel --silent --no-fund --no-audit --non-interactive
           
@@ -95,12 +81,13 @@ jobs:
           $RawLink = (Get-Content $LogFile -Raw) | Select-String -Pattern 'https://[a-zA-Z0-9-]+\.loca\.lt' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value -First 1
           
           if ($RawLink) {
-              $FinalUrl = $RawLink + "/vnc.html?autoconnect=true&password=" + "${{ env.VNC_PASS }}"
+              # Completely removed the trailing password string since authentication is disabled
+              $FinalUrl = $RawLink + "/vnc.html?autoconnect=true"
               Write-Host "===================================================="
-              Write-Host "     WEB-BROWSER CLOUD PC IS READY TO CONNECT      "
+              Write-Host "      WEB-BROWSER CLOUD PC IS READY TO CONNECT      "
               Write-Host "===================================================="
               Write-Host " CLICK LINK: $FinalUrl"
-              Write-Host " SECURITY  : Credentials embedded. Automatic bypass active."
+              Write-Host " SECURITY  : Auth requirement bypassed on backend host."
               Write-Host "===================================================="
           } else {
               Write-Error "CRITICAL: Dynamic gateway assignment timed out."
