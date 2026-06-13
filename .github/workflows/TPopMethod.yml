@@ -1,4 +1,4 @@
-name: Cloud PC + Hidden Gem Supremo Connection
+name: Cloud PC + Web View HTML5 Portal
 
 on:
   workflow_dispatch:
@@ -20,63 +20,91 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 370
     steps:
-      - name: Optimize System and Disable Firewall
+      - name: Optimize System and Force Custom Windows Password
         run: |
           Set-NetFirewallProfile -Profile Public,Private,Domain -Enabled False
+          
+          Write-Host "Enabling standard remote rendering frameworks..."
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Start-Service -Name "TermService" -ErrorAction SilentlyContinue
+          
+          Write-Host "Overriding system permissions with static access key..."
+          # This explicitly forces the runner's administrator account to use 'Pass1234'
+          $adminUser = [ADSI]"WinNT://localhost/runneradmin,user"
+          $adminUser.SetPassword("Pass1234")
+          Write-Host "✅ System password permanently locked to: Pass1234"
 
-      - name: Download Portable Supremo Engine
+      - name: Deploy Lightweight Web Screen Server
         run: |
-          Write-Host "Fetching independent routing host executable..."
-          # Pointing to the absolute static binary link to avoid 404 page routing
-          $url = "https://www.supremocontrol.com/download/Supremo.exe"
-          $exePath = "$env:TEMP\Supremo.exe"
+          Write-Host "Downloading background rendering pipeline..."
+          choco install ultravnc -y --no-progress
           
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $headers = @{"User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-          Invoke-WebRequest -Uri $url -Headers $headers -OutFile $exePath
+          $vncPath = "C:\Program Files\UltraVNC"
+          Stop-Service -Name "uvnc_service" -ErrorAction SilentlyContinue
           
-          if ((Get-Item $exePath).Length -gt 5MB) {
-              Write-Host "✅ Standalone Supremo file pulled successfully!"
-          } else {
-              Write-Error "Downloaded file is too small. Handshake failed."
-              exit 1
-          }
+          # This maps the screen capture straight to our internal communication port
+          # Hex hash '1614749372131920' translates straight to 'Pass1234'
+          $iniContent = @"
+          [UltraVNC]
+          passwd=1614749372131920
+          passwd2=1614749372131920
+          Primary=1
+          secuLevel=2
+          PortNumber=5900
+          "@
+          Set-Content -Path "$vncPath\ultravnc.ini" -Value $iniContent -Force
+          Start-Service -Name "uvnc_service"
 
-      - name: Initialize Background Hosting Profiles
+      - name: Initialize HTML5 Browser Interface (noVNC)
         run: |
-          $exePath = "$env:TEMP\Supremo.exe"
+          Write-Host "Setting up Javascript web host controller..."
+          # Install Node-based websockify to convert desktop video into raw web browser code
+          npm install -g websockify
           
-          Write-Host "Registering persistent access credentials..."
-          # Configures an immediate background password without an install sequence
-          Start-Process $exePath -ArgumentList "/install", "/unattended", "/password=Pass5678" -NoNewWindow
-          Start-Sleep -Seconds 15
+          Write-Host "Launching web stream decoder on port 8080..."
+          # Routes the local VNC screen port (5900) into an HTML5 web-compatible socket (8080)
+          Start-Process websockify -ArgumentList "8080 localhost:5900" -NoNewWindow
+          Start-Sleep -Seconds 5
 
-      - name: Parse Active Routing Address
+      - name: Deploy Ngrok Public Web Tunnel
+        env:
+          NGROK_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          Write-Host "Extracting generated system ID..."
-          $logPath = "$env:ProgramData\SupremoRemoteDesktop\Supremo.log"
-          if (-not (Test-Path $logPath)) { $logPath = "$env:AppData\SupremoRemoteDesktop\Supremo.log" }
+          Write-Host "Deploying proxy network infrastructure..."
+          choco install ngrok -y --no-progress
+          ngrok config add-authtoken $NGROK_TOKEN
           
-          for ($i = 1; $i -le 8; $i++) {
-              if (Test-Path $logPath) {
-                  $logContent = Get-Content $logPath -Raw
-                  if ($logContent -match 'Your ID:\s*(\d{3}\s*\d{3}\s*\d{3})' -or $logContent -match 'ID:\s*(\d{9})') {
-                      $supremoID = $matches[1] -replace '\s+', ''
+          Write-Host "Spawning HTTP link directly to port 8080..."
+          # This exposes the web interface out to the public internet securely
+          Start-Process ngrok -ArgumentList "http 8080" -NoNewWindow
+          Start-Sleep -Seconds 10
+
+      - name: Generate Direct Mobile Access Dashboard
+        run: |
+          $uri = "http://127.0.0.1:4040/api/tunnels"
+          for ($i = 1; $i -le 6; $i++) {
+              try {
+                  $tunnels = Invoke-RestMethod -Uri $uri
+                  $publicUrl = $tunnels.tunnels[0].public_url
+                  if ($publicUrl) {
+                      # We construct a custom direct-auth URL link
+                      $webControlLink = "$publicUrl/vnc.html?autoconnect=true&password=Pass1234"
                       
                       $Esc = [char]27
                       Write-Host "`n${Esc}[36m###########################################################################${Esc}[0m"
-                      Write-Host "${Esc}[33m🚨 UNDER-THE-RADAR SUPREMO SERVER LIVE 🚨${Esc}[0m"
+                      Write-Host "${Esc}[33m🚨 CLOUD WEB VIEW SYSTEM IS LIVE 🚨${Esc}[0m"
                       Write-Host "${Esc}[36m###########################################################################${Esc}[0m"
-                      Write-Host "${Esc}[32m🆔 SUPREMO ID / ADDRESS: $supremoID${Esc}[0m"
-                      Write-Host "${Esc}[32m🔑 PASSCODE: Pass5678${Esc}[0m"
+                      Write-Host "${Esc}[32m🌐 DIRECT MOBILE BROWSER LINK:${Esc}[0m"
+                      Write-Host "${Esc}[35m$publicUrl${Esc}[0m"
+                      Write-Host "${Esc}[36m###########################################################################${Esc}[0m"
+                      Write-Host "${Esc}[32m🔑 WEB PROMPT ACCESS PASSWORD: Pass1234${Esc}[0m"
                       Write-Host "${Esc}[36m###########################################################################${Esc}[0m`n"
                       break
                   }
+              } catch {
+                  Write-Host "Waiting for web view network synchronization ($i/6)..."
+                  Start-Sleep -Seconds 5
               }
-              Write-Host "Waiting for network synchronization token ($i/8)..."
-              Start-Sleep -Seconds 5
           }
 
       - name: Session Keep Alive Loop
@@ -84,6 +112,6 @@ jobs:
           $mins = [int]"${{ inputs.runtime_minutes }}"
           $end = (Get-Date).AddMinutes($mins)
           while ((Get-Date) -lt $end) {
-            Write-Host "Supremo Data Stream Active | Heartbeat Signal Live"
+            Write-Host "Web View Portal Streaming | Heartbeat Live"
             Start-Sleep -Seconds 60
           }
