@@ -1,4 +1,4 @@
-name: Cloud PC + Token-Free RDP Tunnel (Pinggy) + Opera GX
+name: Cloud PC + Token-Free RDP Tunnel (Pagekite) + Opera GX
 
 on:
   workflow_dispatch:
@@ -99,28 +99,31 @@ jobs:
 
       - name: Launch Token-Free Tunnel & Display Connection Endpoint
         run: |
-          Write-Host "Initializing secure reverse port-forward via Pinggy network layers..."
-          $logFile = "$env:TEMP\pinggy.log"
+          Write-Host "Downloading Pagekite Core Engine..."
+          $pkPath = "$env:TEMP\pagekite.py"
+          Invoke-WebRequest -Uri "https://pagekite.net/pk/pagekite.py" -OutFile $pkPath
           
-          # Establish connection via raw TCP tunnel on pinggy.io over standard outbound SSH
-          Start-Process ssh -ArgumentList "-R 0:localhost:3389 tcp@pinggy.io", "-o StrictHostKeyChecking=no", "-o ServerAliveInterval=60" -RedirectStandardOutput $logFile -NoNewWindow
+          Write-Host "Spawning clean, token-free raw TCP tunnel over port 3389..."
+          $logFile = "$env:TEMP\pagekite.log"
           
-          Write-Host "Waiting for tunnel generation..."
-          Start-Sleep -Seconds 10
+          # Initialize background dynamic tunnel mapping local RDP port
+          Start-Process python -ArgumentList "$pkPath --clean --is3389=raw:3389" -RedirectStandardOutput $logFile -NoNewWindow
           
-          # Parse the explicit TCP hostname pattern from pinggy logs
+          Write-Host "Gathering routing metrics..."
+          Start-Sleep -Seconds 12
+          
           $LogContent = Get-Content $logFile
           $CleanAddress = ""
           
           foreach ($Line in $LogContent) {
-              if ($Line -match "tcp://([^ ]+)") {
+              if ($Line -match "as\s+([^ ]+\.pagekite\.me:\d+)") {
                   $CleanAddress = $Matches[1].Trim()
                   break
               }
           }
           
           if ($CleanAddress -ne "") {
-              # ANSI Escape Sequences for high-visibility terminal layout
+              # ANSI Escape Sequences for high-visibility styling
               $Esc = [char]27
               $Cyan = "$Esc[36m"
               $Yellow = "$Esc[33m"
@@ -137,7 +140,7 @@ jobs:
               Write-Host "${Cyan}###########################################################################${Reset}"
               Write-Host ""
           } else {
-              Write-Warning "Tunnel address signature not found. Displaying log buffer:"
+              Write-Warning "Tunnel parsing delayed. Pulling diagnostic fallback logs..."
               Get-Content $logFile -ErrorAction SilentlyContinue
           }
 
