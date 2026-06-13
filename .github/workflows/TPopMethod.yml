@@ -1,4 +1,4 @@
-name: Cloud PC + Web Browser Link + Opera GX (Password Fix Complete)
+name: Cloud PC + Web Browser Link + Opera GX (Passwordless Stable)
 
 on:
   workflow_dispatch:
@@ -15,7 +15,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 190
     env:
-      VNC_PASS: Pass1234
       RUNTIME_MINUTES: 180
 
     steps:
@@ -28,27 +27,25 @@ jobs:
       - name: Force Full HD Resolution
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      - name: Install and Configure TightVNC Server
+      - name: Install and Configure TightVNC Server (No Password)
         run: |
           Invoke-WebRequest -Uri "https://www.tightvnc.com/download/2.8.84/tightvnc-2.8.84-gpl-setup-64bit.msi" -OutFile "$env:TEMP\tightvnc.msi"
-          # Clean install without passing buggy password parameters via CLI
+          # Install cleanly as a system service
           Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\tightvnc.msi`" /quiet /qn SERVER_REGISTER_AS_SERVICE=1" -Wait
           
           Start-Sleep -Seconds 3
           $vncPath = "HKLM:\SOFTWARE\TightVNC\Server"
           if (Test-Path $vncPath) {
-              # Core Fix 1: Hardcode the precise hex hash for "Pass1234" straight into the registry
-              # This completely bypasses MSI parsing errors
-              [byte[]]$passHex = 0x2e, 0xbf, 0x05, 0x11, 0x51, 0x9a, 0xbb, 0xcd
-              Set-ItemProperty -Path $vncPath -Name "Password" -Value $passHex -Type Binary
-              Set-ItemProperty -Path $vncPath -Name "ControlPassword" -Value $passHex -Type Binary
+              # Strip authentication entirely (AuthRequired = 0, AuthType = 2 for "None")
+              Set-ItemProperty -Path $vncPath -Name "AuthRequired" -Value 0 -Type DWord
+              Set-ItemProperty -Path $vncPath -Name "AuthType" -Value 2 -Type DWord
               
-              # Core Fix 2: Keep the loopback permissions active
+              # Force loopback configurations to permit local websockify proxy handshakes
               Set-ItemProperty -Path $vncPath -Name "AllowLoopback" -Value 1 -Type DWord
               Set-ItemProperty -Path $vncPath -Name "AcceptLocalConnections" -Value 1 -Type DWord
           }
           
-          # Restart to apply the pristine password and connection configurations instantly
+          # Restart service to drop password authentication requirements instantly
           Restart-Service -Name "TightVNC Server" -Force
 
       - name: Download & Force Consumer Build of Opera GX
@@ -91,7 +88,7 @@ jobs:
               Write-Host "      WEB-BROWSER CLOUD PC IS READY TO CONNECT      "
               Write-Host "===================================================="
               Write-Host " CLICK LINK: $FinalUrl"
-              Write-Host " PASSWORD  : ${{ env.VNC_PASS }}"
+              Write-Host " SECURITY  : Password disabled. Click 'Connect' to open."
               Write-Host "===================================================="
           } else {
               Write-Error "CRITICAL: Dynamic gateway assignment timed out."
