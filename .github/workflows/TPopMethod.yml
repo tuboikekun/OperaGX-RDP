@@ -1,4 +1,4 @@
-name: Cloud PC via Release-Hosted AweSun Deployment (Zip Fix)
+name: Cloud PC via Release-Hosted AweSun Deployment (Execution Fix)
 
 on:
   workflow_dispatch:
@@ -38,35 +38,30 @@ jobs:
           Invoke-WebRequest -Uri "${{ env.RELEASE_URL }}" -OutFile "awesun.zip"
           
           Write-Host "Extracting zip package directly to Program Files..."
-          # Since your zip contains the "AweSun" folder, extracting to "Program Files (x86)" 
-          # puts the files exactly into "C:\Program Files (x86)\AweSun\"
+          # Drops the internal "AweSun" folder directly into Program Files (x86)
           Expand-Archive -Path "awesun.zip" -DestinationPath "C:\Program Files (x86)" -Force
 
-      - name: Initialize Main Background Execution Engines
+      - name: Initialize Main AweSun Desktop App
         run: |
           $AweSunExe = "C:\Program Files (x86)\AweSun\AweSun.exe"
-          $ServiceExe = "C:\Program Files (x86)\AweSun\AweSunService.exe"
           
-          # Verification check to make sure it landed perfectly
+          # Quick check to ensure the file exists before launching
           if (-not (Test-Path $AweSunExe)) {
-              Write-Error "CRITICAL: AweSun.exe was still not found at $AweSunExe."
-              Write-Host "Listing what actually got extracted for debugging:"
-              Get-ChildItem -Path "C:\Program Files (x86)" -Filter "*awesun*" -Recurse -ErrorAction SilentlyContinue
+              Write-Error "CRITICAL: AweSun.exe was not found at $AweSunExe."
+              Write-Host "Printing contents of extraction path for troubleshooting:"
+              Get-ChildItem -Path "C:\Program Files (x86)\AweSun" -Recurse -ErrorAction SilentlyContinue
               exit 1
           }
           
-          Write-Host "Registering background service..."
-          Start-Process $ServiceExe -ArgumentList "-install" -Wait -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 5
-          
           Write-Host "Launching connection dashboard framework..."
+          # Launching the main executable natively in headless silent mode
           Start-Process $AweSunExe -ArgumentList "-s" -NoNewWindow
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 15
           
           Write-Host "===================================================="
           Write-Host "         AWESUN ENGINE DEPLOYMENT COMPLETE          "
           Write-Host "===================================================="
-          Write-Host " Software extracted and initialized successfully."
+          Write-Host " Application initialized successfully."
           Write-Host " Check your phone or local PC app to watch it connect!"
           Write-Host "===================================================="
 
