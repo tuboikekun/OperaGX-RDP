@@ -1,4 +1,4 @@
-name: Cloud PC + Token-Free RDP Tunnel + Opera GX
+name: Cloud PC + Token-Free RDP Tunnel (LHR) + Opera GX
 
 on:
   workflow_dispatch:
@@ -99,32 +99,24 @@ jobs:
 
       - name: Launch Token-Free Tunnel & Display Connection Endpoint
         run: |
-          Write-Host "Initializing secure reverse port-forward via Serveo network layers..."
-          $logFile = "$env:TEMP\serveo.log"
+          Write-Host "Initializing secure reverse port-forward via Localhost.run network layers..."
+          $logFile = "$env:TEMP\lhr.log"
           
-          # Try connecting using explicit sequential backup ports to guarantee server acceptance
-          $portsToTry = @("13389", "23389", "33389")
-          $CleanAddress = ""
+          # Establish connection via localhost.run reverse endpoint proxy over standard SSH
+          Start-Process ssh -ArgumentList "-R 80:localhost:3389 nokey@localhost.run", "-o StrictHostKeyChecking=no", "-o ServerAliveInterval=60" -RedirectStandardOutput $logFile -NoNewWindow
           
-          foreach ($port in $portsToTry) {
-              Write-Host "Attempting tunnel assignment on public port: $port..."
-              Remove-Item $logFile -ErrorAction SilentlyContinue
+          Write-Host "Gathering link generation metrics..."
+          Start-Sleep -Seconds 8
+          
+          # Extract generated endpoint domain out of logs
+          $LogContent = Get-Content $logFile
+          $TunnelInfo = $LogContent | Select-String "tunneled with tls via"
+          
+          if ($TunnelInfo) {
+              # Parse out the clean hostname (e.g. randomstring.lhr.life)
+              $CleanAddress = ($TunnelInfo -split "via ")[1].Trim()
               
-              $proc = Start-Process ssh -ArgumentList "-R ${port}:localhost:3389 serveo.net", "-o StrictHostKeyChecking=no", "-o ServerAliveInterval=60" -RedirectStandardOutput $logFile -NoNewWindow -PassThru
-              Start-Sleep -Seconds 6
-              
-              $logContent = Get-Content $logFile -ErrorAction SilentlyContinue
-              if ($logContent -match "Forwarding TCP connections on") {
-                  $CleanAddress = "serveo.net:$port"
-                  break
-              } else {
-                  # Terminate failed port process before shifting to fallback
-                  Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-              }
-          }
-          
-          if ($CleanAddress -ne "") {
-              # ANSI Escape Sequences for structural color output execution
+              # ANSI Escape Sequences for high-visibility styling
               $Esc = [char]27
               $Cyan = "$Esc[36m"
               $Yellow = "$Esc[33m"
@@ -141,8 +133,8 @@ jobs:
               Write-Host "${Cyan}###########################################################################${Reset}"
               Write-Host ""
           } else {
-              Write-Error "All token-free public relay ports are congested. Please re-trigger the workflow."
-              exit 1
+              Write-Warning "Tunnel initialization encountered a delay. Inspecting raw log stream..."
+              Get-Content $logFile -ErrorAction SilentlyContinue
           }
 
       - name: Keep Alive Execution Loop
