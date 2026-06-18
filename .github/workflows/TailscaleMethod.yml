@@ -202,7 +202,7 @@ jobs:
           $u = $env:RDP_USER
           $sec = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
           
-          # Create and enforce Admin privileges for account 'user'
+          # 1. Create the 'user' account with full Administrative powers
           if (-not (Get-LocalUser -Name $u -EA SilentlyContinue)) {
             New-LocalUser -Name $u -Password $sec -AccountNeverExpires
           } else {
@@ -210,11 +210,23 @@ jobs:
             Enable-LocalUser -Name $u
           }
           
-          # Enforce absolute Admin status and RDP workspace execution clearance
           Add-LocalGroupMember -Group "Administrators" -Member $u -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u -ErrorAction SilentlyContinue
           
-          # Open local registry parameters allowing full RDP tunneling
+          # 2. PROFILE MIRROR SYNC: Force-inject Opera workspace settings into the 'user' account profile path
+          Write-Host "Syncing browser configuration templates to the custom user space..."
+          $targetUserAppData = "C:\Users\$u\AppData\Roaming\Opera Software\Opera GX Stable\Default"
+          if (-not (Test-Path $targetUserAppData)) { 
+              New-Item -ItemType Directory -Path $targetUserAppData -Force | Out-Null 
+          }
+          
+          $runnerDefaultPref = "$env:APPDATA\Opera Software\Opera GX Stable\Default\Preferences"
+          if (Test-Path $runnerDefaultPref) {
+              Copy-Item -Path $runnerDefaultPref -Destination "$targetUserAppData\Preferences" -Force -ErrorAction SilentlyContinue
+              Copy-Item -Path $runnerDefaultPref -Destination "$targetUserAppData\Preferences.backup" -Force -ErrorAction SilentlyContinue
+          }
+
+          # Enable RDP engine channels globally
           Set-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop" | Out-Null
 
